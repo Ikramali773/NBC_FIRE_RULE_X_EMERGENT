@@ -1,9 +1,10 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import PlanSections from '@/components/PlanSections';
 import type { AnalyzeResponse, ComplianceResultItem } from '@/types';
 
 const API_URL = '';
@@ -223,9 +224,8 @@ function ResultsContent() {
                                     const isOpen = expandedRow === it.id;
                                     const s = STATUS_STYLES[it.status] || STATUS_STYLES.not_required;
                                     return (
-                                        <>
+                                        <Fragment key={it.id}>
                                             <tr
-                                                key={it.id}
                                                 data-testid={`row-${it.id}`}
                                                 className={`border-t border-slate-100 cursor-pointer hover:bg-slate-50 ${isOpen ? 'bg-slate-50' : ''}`}
                                                 onClick={() => setExpandedRow(isOpen ? null : it.id)}
@@ -285,7 +285,7 @@ function ResultsContent() {
                                                     </td>
                                                 </tr>
                                             )}
-                                        </>
+                                        </Fragment>
                                     );
                                 })}
                             </tbody>
@@ -382,6 +382,9 @@ function ResultsContent() {
                         </div>
                     </Section>
                 )}
+
+                {/* NEW LAYER — plan-only sections (render nothing on Manual Entry) */}
+                <PlanSections />
 
                 {/* SECTION 9: Disclaimer */}
                 <Section title="9. Disclaimer" testid="section-disclaimer">

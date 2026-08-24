@@ -87,6 +87,7 @@ function ConfirmForm() {
 
             const data = await response.json();
             sessionStorage.setItem('firerulx_result', JSON.stringify(data));
+            sessionStorage.removeItem('firerulx_plan');
             router.push('/results');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Something went wrong');

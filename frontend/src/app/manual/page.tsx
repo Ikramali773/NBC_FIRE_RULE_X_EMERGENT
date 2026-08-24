@@ -188,6 +188,7 @@ export default function ManualPage() {
             const data = await res.json();
             if (!res.ok || data.error) throw new Error(data.error || 'Analysis failed');
             sessionStorage.setItem('firerulx_result', JSON.stringify(data));
+            sessionStorage.removeItem('firerulx_plan');
             router.push('/results');
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Something went wrong');

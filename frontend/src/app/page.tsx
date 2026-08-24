@@ -38,6 +38,26 @@ export default function Home() {
                                 See what it checks
                             </a>
                         </div>
+
+                        {/* Entry-mode choice */}
+                        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-200 border border-slate-200 max-w-2xl">
+                            <Link href="/manual" data-testid="entry-mode-manual" className="group bg-white p-5 hover:bg-slate-50 transition-colors">
+                                <p className="text-[10px] font-mono text-slate-400">MODE 01</p>
+                                <h3 className="text-sm font-bold text-slate-900 mt-1">Manual Entry</h3>
+                                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                                    Type building parameters directly. The proven NBC Part 4 engine — unchanged.
+                                </p>
+                                <span className="inline-block mt-3 text-[11px] font-bold text-[#2962FF] uppercase tracking-widest">Enter manually →</span>
+                            </Link>
+                            <Link href="/upload" data-testid="entry-mode-upload" className="group bg-white p-5 hover:bg-slate-50 transition-colors">
+                                <p className="text-[10px] font-mono text-slate-400">MODE 02 · NEW</p>
+                                <h3 className="text-sm font-bold text-slate-900 mt-1">Upload Building Plan</h3>
+                                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                                    Read a sanctioned PDF/DWG. Review every value with confidence levels, correct, confirm — then the same engine runs.
+                                </p>
+                                <span className="inline-block mt-3 text-[11px] font-bold text-[#2962FF] uppercase tracking-widest">Upload a plan →</span>
+                            </Link>
+                        </div>
                     </div>
 
                     <div className="md:col-span-4">

@@ -16,6 +16,8 @@ from routes.analyze_manual import router as analyze_manual_router
 from routes.analyze_simple import router as analyze_simple_router
 from routes.analyze_mixed import router as analyze_mixed_router
 from routes.report_pdf import router as report_pdf_router
+from routes.plan import router as plan_router
+from plan_reader.config import log_config_status
 
 app = FastAPI(
     title="FireRuleX API",
@@ -38,6 +40,14 @@ app.include_router(analyze_manual_router)
 app.include_router(analyze_simple_router)
 app.include_router(analyze_mixed_router)
 app.include_router(report_pdf_router)
+app.include_router(plan_router)
+
+
+@app.on_event("startup")
+async def _log_service_status() -> None:
+    # Part 2 — log each configured service's status so it can be confirmed
+    # from the deployment log alone.
+    log_config_status()
 
 
 @app.get("/")

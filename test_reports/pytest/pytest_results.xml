@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="14" time="1.390" timestamp="2026-08-24T18:46:03.914207+00:00" hostname="agent-env-991bc692-710e-4592-8210-8ad2f93c2bd1"><testcase classname="tests.backend_test.TestPlanStatus" name="test_status" time="0.272" /><testcase classname="tests.backend_test.TestPlanExtract" name="test_tables_found" time="0.195" /><testcase classname="tests.backend_test.TestPlanExtract" name="test_geometry_and_page_image" time="0.000" /><testcase classname="tests.backend_test.TestPlanExtract" name="test_plan_reference_metadata" time="0.000" /><testcase classname="tests.backend_test.TestPlanExtract" name="test_prefill_values" time="0.000" /><testcase classname="tests.backend_test.TestPlanExtract" name="test_fields_have_confidence" time="0.000" /><testcase classname="tests.backend_test.TestPlanExtract" name="test_dwg_graceful_degradation" time="0.087" /><testcase classname="tests.backend_test.TestPlacement" name="test_placement_without_plan_id" time="0.179" /><testcase classname="tests.backend_test.TestPlacement" name="test_full_placement" time="0.173" /><testcase classname="tests.backend_test.TestExistingEndpoints" name="test_occupancies" time="0.083" /><testcase classname="tests.backend_test.TestExistingEndpoints" name="test_analyze_mixed_shape" time="0.000" /><testcase classname="tests.backend_test.TestExistingEndpoints" name="test_analyze_manual" time="0.088"><failure message="AssertionError: {&quot;error&quot;:&quot;Invalid input. Ensure all required BuildingInput fields are provided.&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">self = &lt;tests.backend_test.TestExistingEndpoints object at 0xfee89266a8d0&gt;
+client = &lt;requests.sessions.Session object at 0xfee89258d990&gt;
+
+    def test_analyze_manual(self, client):
+        payload = {
+            "buildingName": "TEST_Manual",
+            "buildingType": "A-4",
+            "totalFloorArea": 1500,
+            "numberOfFloors": 3,
+            "floorAreas": [500, 500, 500],
+            "buildingHeight": 20,
+            "hasKitchen": False,
+        }
+        r = client.post(f"{BASE_URL}/api/analyze-manual", json=payload, timeout=TIMEOUT)
+&gt;       assert r.status_code == 200, r.text[:600]
+E       AssertionError: {"error":"Invalid input. Ensure all required BuildingInput fields are provided."}
+E       assert 400 == 200
+E        +  where 400 = &lt;Response [400]&gt;.status_code
+
+tests/backend_test.py:235: AssertionError</failure></testcase><testcase classname="tests.backend_test.TestExistingEndpoints" name="test_compliance_pdf" time="0.123" /><testcase classname="tests.backend_test.TestExistingEndpoints" name="test_analyze_mixed_validation_error" time="0.079" /></testsuite></testsuites>

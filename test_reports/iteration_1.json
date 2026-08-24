@@ -1,0 +1,42 @@
+{
+  "summary": "Full backend + frontend test of the NEW plan-reader layer over the untouched NBC Part 4 engine. Backend: 13/14 pytest cases pass (/api/plan/status, /api/plan/extract with synthetic fixture, DWG graceful degradation, /api/plan/placement with and without planId, /api/analyze-mixed, /api/occupancies, /api/reports/compliance.pdf). Frontend: home entry-mode choice, full upload->review->confirm->results flow with Plan Reference, Equipment Quantities and Equipment Placement (SVG overlay, side table, legend, zoom) all verified; Manual Entry regression confirmed clean (no plan-only sections). Only failure is a PRE-EXISTING crash in /api/analyze-manual inside the unmodified engine (not caused by this build).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/analyze-manual", "issue": "PRE-EXISTING (engine, not new layer): every payload returns 400 'Invalid input...'. Real cause is AttributeError at engines/standards_engine.py:64 -> nbc.firefighting_installations where code_findings['nbc_compliance'] is None; the traceback is swallowed by the broad except in routes/analyze_manual.py and reported as a 400. This endpoint is still used by frontend/src/app/confirm/page.tsx, so the confirm flow is dead.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "/api/plan/extract", "issue": "planReference returns duplicate keys 'odps_inward_no' and 'inward_no' with the identical value (ODPS/2023/014577); the panel renders the same row twice."},
+      {"endpoint": "/api/plan/placement", "issue": "Sprinkler quantity inconsistency between sections: quantities table reports 392 heads (engine, ~56/floor) while the plan overlay/side table places only 12 heads on the Ground Floor block with no note explaining that the overlay grid is limited to the detected floor-plan block."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ResultsContent (results/page.tsx)", "issue": "React console error on every /results render: 'Each child in a list should have a unique key prop' — appears on both upload and manual flows.", "selector": "n/a (console)", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/results — Suggested Equipment Placement (plan-viewer)", "issues": ["Default zoom does not fit the sheet to the viewport: rendered image is ~842px wide inside a ~600px column, so the plan (title block text) is clipped on both sides and the user must pan immediately. A fit-to-width initial scale would be better.", "Placement markers are tiny relative to the whole-sheet render; consider auto-zooming to the detected floor-plan block."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Fix /api/analyze-manual: guard nbc_compliance None in engines/standards_engine.py caller path (or stop /confirm from calling it) — currently a hard failure for any payload. NOTE: engine file change may be out of scope; the safe alternative is to route /confirm to /api/analyze-mixed.",
+    "De-duplicate planReference keys (odps_inward_no vs inward_no) in plan_reader/table_parser.py Type-3 parsing.",
+    "Add a note/label reconciling the engine sprinkler total with the number of heads drawn on the single-floor overlay.",
+    "Fix missing React list key in results/page.tsx.",
+    "Make PlanViewer initial scale fit-to-container so the plan is not clipped on load."
+  ],
+  "critical_code_review_comments": [
+    "routes/analyze_manual.py swallows all exceptions into a generic 400 — real 500-class bugs (like the current AttributeError) are masked; return 500 with the error class or log-and-reraise.",
+    "routes/plan.py: doc.close() is called before doc.original_format is read in the success response (works today only because original_format is a plain attribute) — read all needed attributes before close.",
+    "plan_reader/store.py in-memory plan store means placement silently degrades after a backend reload; the graceful 'session expired' path exists and works, but consider TTL/size caps documented.",
+    "/api/plan/extract returns a full base64 page image inline (large payload); consider a separate image endpoint to keep the review JSON small."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "93% (13/14; the single failure is pre-existing and outside this build)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "Used existing fixture /app/backend/tests/_synthetic_plan.pdf. Test analyses named TEST_Synthetic / TEST_Manual; no persistence, nothing to clean up.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression suite is /app/backend/tests/backend_test.py (run: /root/.venv/bin/python -m pytest tests/backend_test.py from /app/backend). Verified: extract prefill (plotArea 1200, builtUp 3060, 7 floors, 22.5 m, A-4, kitchen+sprinkler true), tablesFound all true, geometryAvailable true, ODPS/2019/004102 earlier-approved case, DWG -> extractionPath dwg_unsupported (200), placement without planId -> available:false + quantities, full placement -> points(extinguisher/hose_reel/sprinkler/riser) + riser&ring pipes + calibration 1:100 ptPerM 28.35 + sanity.ok + correct 'Per NBC Part 4 calculation' vs 'Estimated per ...' labels. Frontend verified end-to-end on the public URL; manual flow correctly clears sessionStorage 'firerulx_plan' at analyze time (note: it is NOT cleared on /manual page load, only right before navigation — sections still absent, so behaviour is fine). Do not attempt to fix the 13 pre-existing test_rule_engine.py failures.",
+  "rca_of_the_issue": "/api/analyze-manual: rule_engine.run_rule_engine -> standards_engine.evaluate accesses code_findings['nbc_compliance'].firefighting_installations; the key exists but the value is None for these inputs, raising AttributeError which routes/analyze_manual.py converts to a misleading 400 'Invalid input'. Reproduce: POST any BuildingInput (e.g. {buildingName,buildingType:'A-4',totalFloorArea:1500,numberOfFloors:3,floorAreas:[500,500,500],buildingHeight:20}) to /api/analyze-manual. Confirmed pre-existing: git diff shows no changes to rule_engine.py/engines/*."
+}
