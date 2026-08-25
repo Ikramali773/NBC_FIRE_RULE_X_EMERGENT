@@ -1263,16 +1263,6 @@
     background-color: var(--color-amber-100);
   }
 
-  .bg-black\/40 {
-    background-color: #0006;
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-black\/40 {
-      background-color: color-mix(in oklab, var(--color-black) 40%, transparent);
-    }
-  }
-
   .bg-black\/70 {
     background-color: #000000b3;
   }
@@ -1822,16 +1812,6 @@
 
   .text-white {
     color: var(--color-white);
-  }
-
-  .text-white\/70 {
-    color: #ffffffb3;
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .text-white\/70 {
-      color: color-mix(in oklab, var(--color-white) 70%, transparent);
-    }
   }
 
   .normal-case {

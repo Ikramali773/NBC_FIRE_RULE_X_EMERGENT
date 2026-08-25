@@ -1,7 +1,1 @@
-{
-  "/confirm/page": "app/confirm/page.js",
-  "/manual/page": "app/manual/page.js",
-  "/page": "app/page.js",
-  "/results/page": "app/results/page.js",
-  "/upload/page": "app/upload/page.js"
-}
+{}
