@@ -53,3 +53,45 @@ async def _log_service_status() -> None:
 @app.get("/")
 async def root():
     return {"status": "ok", "service": "FireRuleX API", "version": "0.2.0"}
+
+
+@app.get("/api/health")
+async def health_check():
+    """Check the status of all API keys and services."""
+    import os
+    from plan_reader.config import get_plan_config
+
+    plan_cfg = get_plan_config()
+
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+
+    checks = {
+        "GEMINI_API_KEY": {
+            "set": bool(gemini_key),
+            "masked": f"{gemini_key[:4]}...{gemini_key[-4:]}" if len(gemini_key) > 8 else ("***" if gemini_key else "NOT SET"),
+        },
+        "OPENAI_API_KEY": {
+            "set": bool(openai_key),
+            "masked": f"{openai_key[:4]}...{openai_key[-4:]}" if len(openai_key) > 8 else ("***" if openai_key else "NOT SET"),
+        },
+        "PLAN_AI_OCR": {
+            "requested": plan_cfg["ai_ocr_requested"],
+            "key_present": plan_cfg["ai_ocr_key_present"],
+            "active": plan_cfg["ai_ocr_active"],
+        },
+    }
+
+    # Overall status: healthy if the primary AI provider key is set
+    overall = "healthy" if gemini_key else "degraded"
+
+    return {
+        "status": overall,
+        "service": "FireRuleX API",
+        "version": "0.2.0",
+        "checks": checks,
+        "message": (
+            "All systems operational." if gemini_key
+            else "⚠ GEMINI_API_KEY is not set. AI analysis will fail. Add it to backend/.env"
+        ),
+    }

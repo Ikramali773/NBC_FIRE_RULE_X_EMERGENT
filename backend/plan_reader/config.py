@@ -37,8 +37,8 @@ def get_plan_config() -> dict:
 def log_config_status() -> None:
     """Print each configured service's status on startup (Part 2)."""
     cfg = get_plan_config()
-    print("──────────────────────────────────────────────")
-    print("[plan_reader] Building-Plan Reading layer — service status")
+    print("----------------------------------------------")
+    print("[plan_reader] Building-Plan Reading layer - service status")
     print(f"[plan_reader]   Core PDF/vector extraction (PyMuPDF) : ENABLED (zero-cost, always on)")
     print(f"[plan_reader]   Local table detection                : ENABLED (zero-cost, always on)")
     if cfg["ai_ocr_active"]:
@@ -48,7 +48,7 @@ def log_config_status() -> None:
     elif cfg["ai_ocr_key_present"] and not cfg["ai_ocr_requested"]:
         status = "DISABLED (key present but PLAN_ENABLE_AI_OCR not set)"
     else:
-        status = "DISABLED (not configured — vector-text-only mode)"
+        status = "DISABLED (not configured - vector-text-only mode)"
     print(f"[plan_reader]   Optional AI-vision OCR (Gemini)      : {status}")
     print(f"[plan_reader]   Viewer render zoom                   : {cfg['render_zoom']}x")
-    print("──────────────────────────────────────────────")
+    print("----------------------------------------------")

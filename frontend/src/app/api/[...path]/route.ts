@@ -23,16 +23,19 @@ async function proxyRequest(request: NextRequest, params: { path?: string[] }) {
         method: request.method,
         headers,
         redirect: 'manual',
+        signal: AbortSignal.timeout(300000), // 5 min timeout for large PDF processing
     };
 
     if (!['GET', 'HEAD'].includes(request.method)) {
-        init.body = await request.text();
+        // Use arrayBuffer to preserve binary data (e.g. multipart/form-data file uploads)
+        const buf = await request.arrayBuffer();
+        init.body = Buffer.from(buf);
     }
 
     const upstream = await fetch(targetUrl, init);
-    const responseBody = await upstream.text();
+    const responseBody = await upstream.arrayBuffer();
 
-    return new NextResponse(responseBody, {
+    return new NextResponse(Buffer.from(responseBody), {
         status: upstream.status,
         headers: {
             'content-type': upstream.headers.get('content-type') || 'application/json',
