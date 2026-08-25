@@ -159,28 +159,44 @@ def parse_type3_metadata(text: str, tables: list[list[list[str]]]) -> dict | Non
         m = re.search(pattern, hay, re.IGNORECASE)
         return m.group(1).strip() if m else None
 
+    def ref(pattern: str) -> str | None:
+        """Like one(), but only accept values that look like a real reference
+        number (contain a digit or a '/'). Rejects header-word bleed such as
+        'Development' / 'INWARD' / 'APP' picked up from adjacent columns."""
+        val = one(pattern)
+        if not val:
+            return None
+        val = val.strip(" .:;-)")
+        if not re.search(r"[0-9/]", val) or len(val) < 3:
+            return None
+        return val
+
     odps_all = re.findall(r"ODPS\s*/\s*\d{4}\s*/\s*\d{3,7}", hay, re.IGNORECASE)
     odps_all = [re.sub(r"\s+", "", x).upper() for x in odps_all]
 
-    application_no = one(r"APPLICATION\s*(?:NO|NUMBER)\.?\s*[:\-]?\s*([A-Za-z0-9/\-]+)")
-    dev_permission = one(r"DEVELOPMENT\s*PERMISSION\s*(?:NO|NUMBER)?\.?\s*[:\-]?\s*([A-Za-z0-9/\-]+)")
-    inward_no = one(r"INWARD\s*(?:NO|NUMBER)\.?\s*[:\-]?\s*([A-Za-z0-9/\-]+)")
+    application_no = ref(r"APPLICATION\s*(?:NO|NUMBER)\.?\s*[:\-]?\s*([A-Za-z0-9/\-]+)")
+    dev_permission = ref(r"DEVELOPMENT\s*PERMISSION\s*(?:NO|NUMBER)?\.?\s*[:\-]?\s*([A-Za-z0-9/\-]+)")
+    inward_no = ref(r"INWARD\s*(?:NO|NUMBER)\.?\s*[:\-]?\s*([A-Za-z0-9/\-]+)")
     inward_date = one(r"INWARD\s*DATE\s*[:\-]?\s*([0-9]{1,2}[/\-][0-9]{1,2}[/\-][0-9]{2,4})")
     approval_date = one(r"(?:DATE\s*OF\s*APPROVAL|APPROVAL\s*DATE|SANCTION\s*DATE)\s*[:\-]?\s*([0-9]{1,2}[/\-][0-9]{1,2}[/\-][0-9]{2,4})")
     sheet = one(r"SHEET\s*(?:NO)?\.?\s*[:\-]?\s*(\d+\s*/\s*\d+)")
     scale = one(r"SCALE\s*[:\-]?\s*(1\s*[:=]\s*[0-9.]+|1\s*CM\s*=\s*[0-9.]+\s*M[T]?)")
+    if scale:
+        scale = scale.strip(" .:;-)")
     authority = one(r"((?:ASSISTANT\s+ENGINEER|EXECUTIVE\s+ENGINEER|CITY\s+ENGINEER|COMPETENT\s+AUTHORITY|TOWN\s+PLANNER)[^\n]{0,40})")
 
-    # EARLIER APPROVED CASE — capture as a separate, linked reference
+    # EARLIER APPROVED CASE — only meaningful if it actually cites a prior ref
     earlier = None
     em = re.search(r"EARLIER\s*APPROVED\s*CASE[^\n:]*:?\s*([^\n]{0,120})", hay, re.IGNORECASE)
     if em:
         block = em.group(1)
         prior_odps = re.findall(r"ODPS\s*/\s*\d{4}\s*/\s*\d{3,7}", block, re.IGNORECASE)
-        earlier = {
-            "raw": block.strip()[:120],
-            "odps_refs": [re.sub(r"\s+", "", x).upper() for x in prior_odps],
-        }
+        prior_generic = re.findall(r"\b[A-Z]{2,}/\d{2,4}/\d{2,7}\b", block)
+        if prior_odps or prior_generic:
+            earlier = {
+                "raw": block.strip()[:120],
+                "odps_refs": [re.sub(r"\s+", "", x).upper() for x in prior_odps],
+            }
 
     # inward_no often IS the odps number
     if not inward_no and odps_all:

@@ -68,16 +68,50 @@ function ConfirmForm() {
         });
     };
 
+    const deriveOccupancy = (): string => {
+        if (form.occupancySubdivision) return String(form.occupancySubdivision);
+        const map: Record<string, string> = {
+            hospital: 'C-2', nursing: 'C-2', school: 'B-1', college: 'B-1',
+            hotel: 'A-5', apartment: 'A-4', residential: 'A-4', flat: 'A-4',
+            office: 'E-1', business: 'E-1', it: 'E-1', mall: 'F-2', shop: 'F-1',
+            mercantile: 'F-1', commercial: 'F-1', restaurant: 'D-4', banquet: 'D-3',
+            assembly: 'D-1', factory: 'G-1', industrial: 'G-1', warehouse: 'H', storage: 'H',
+        };
+        const bt = String(form.buildingType || '').toLowerCase();
+        for (const k of Object.keys(map)) if (bt.includes(k)) return map[k];
+        if (form.occupancyGroup) return `${form.occupancyGroup}-1`;
+        return 'F-1';
+    };
+
     const handleSubmit = async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            const response = await fetch(`${API_BASE_URL}/api/analyze-manual`, {
+            let areas = (form.floorAreas || []).filter((a) => a > 0);
+            // If the user gave a Total Floor Area but no per-floor breakdown,
+            // distribute it evenly across the floors as a starting point.
+            if (areas.length === 0 && form.totalFloorArea && form.totalFloorArea > 0) {
+                const n = Math.max(1, form.numberOfFloors || 1);
+                areas = Array(n).fill(Math.round((form.totalFloorArea / n) * 10) / 10);
+            }
+            if (!form.buildingHeight || form.buildingHeight <= 0) throw new Error('Please enter a building height greater than 0.');
+            if (areas.length === 0) throw new Error('Please enter Total Floor Area, or at least one per-floor area.');
+            const body = {
+                projectName: form.buildingName,
+                buildingHeight: form.buildingHeight,
+                numberOfFloors: areas.length,
+                floorAreas: areas,
+                hasKitchen: !!form.hasKitchen,
+                sprinklerProposed: !!form.hasSprinklers,
+                constructionType: form.constructionType || 'type12',
+                occupancySelection: { mode: 'single', primaryOccupancy: deriveOccupancy(), secondaryOccupancies: [], occupancyZones: [] },
+            };
+            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+            const response = await fetch(`${API_BASE_URL}/api/analyze-mixed`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form),
+                body: JSON.stringify(body),
             });
 
             if (!response.ok) {
@@ -125,6 +159,7 @@ function ConfirmForm() {
                         <input
                             type="text"
                             value={form.buildingName}
+                            data-testid="confirm-building-name"
                             onChange={(e) => updateField('buildingName', e.target.value)}
                             placeholder="e.g. Acme Office Complex"
                             className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none transition text-sm"
@@ -139,6 +174,7 @@ function ConfirmForm() {
                         <input
                             type="text"
                             value={form.buildingType}
+                            data-testid="confirm-building-type"
                             onChange={(e) => updateField('buildingType', e.target.value)}
                             placeholder="e.g. Office, Hospital, School, Residential"
                             className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none transition text-sm"
@@ -154,6 +190,7 @@ function ConfirmForm() {
                             <input
                                 type="number"
                                 value={form.totalFloorArea || ''}
+                                data-testid="confirm-total-area"
                                 onChange={(e) => updateField('totalFloorArea', Number(e.target.value))}
                                 min={0}
                                 className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none transition text-sm"
@@ -166,6 +203,7 @@ function ConfirmForm() {
                             <input
                                 type="number"
                                 value={form.numberOfFloors || ''}
+                                data-testid="confirm-num-floors"
                                 onChange={(e) => handleFloorCountChange(Number(e.target.value))}
                                 min={1}
                                 max={50}
@@ -186,6 +224,7 @@ function ConfirmForm() {
                                     <input
                                         type="number"
                                         value={area || ''}
+                                        data-testid={`confirm-floor-area-${i}`}
                                         onChange={(e) => updateFloorArea(i, Number(e.target.value))}
                                         min={0}
                                         className="w-full px-2 py-1.5 rounded-lg border border-slate-200 focus:border-orange-400 outline-none transition text-sm"
@@ -204,6 +243,7 @@ function ConfirmForm() {
                             <input
                                 type="number"
                                 value={form.buildingHeight || ''}
+                                data-testid="confirm-height"
                                 onChange={(e) => updateField('buildingHeight', Number(e.target.value))}
                                 min={0}
                                 className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none transition text-sm"
@@ -276,8 +316,9 @@ function ConfirmForm() {
                     {/* Actions */}
                     <div className="flex gap-3 pt-2">
                         <button
+                            data-testid="confirm-analyze-submit"
                             onClick={handleSubmit}
-                            disabled={loading || !form.totalFloorArea}
+                            disabled={loading || (!form.totalFloorArea && (form.floorAreas || []).every((a) => !a))}
                             className="btn-primary flex-1"
                         >
                             {loading ? (

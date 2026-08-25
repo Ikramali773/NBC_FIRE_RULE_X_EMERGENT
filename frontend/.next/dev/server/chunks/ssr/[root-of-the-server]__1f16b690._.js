@@ -287,11 +287,56 @@ const POINT_STYLE = {
         r: 10
     }
 };
-function PlanViewer({ image, points, pipes, riser }) {
+function PlanViewer({ image, points, pipes, riser, focusBox }) {
     const [scale, setScale] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(1);
     const [tx, setTx] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(0);
     const [ty, setTy] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(0);
     const dragging = (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useRef"])(null);
+    const containerRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useRef"])(null);
+    const [mode, setMode] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(focusBox ? 'block' : 'sheet');
+    // Fit-to-block: compute the initial pan/zoom so the analysed floor-plan
+    // block is centred and enlarged in the viewport (Part 4 readability).
+    const fitToBox = (box)=>{
+        const el = containerRef.current;
+        if (!el || !box) {
+            setScale(1);
+            setTx(0);
+            setTy(0);
+            return;
+        }
+        const W = el.clientWidth, H = el.clientHeight;
+        const dispImgW = Math.min(W, H * (image.width / image.height));
+        const dispImgH = dispImgW * (image.height / image.width);
+        const k = dispImgW / image.width; // image-px → displayed-px
+        const [x0, y0, x1, y1] = box;
+        const pad = 1.25; // padding around the block
+        const boxW = Math.max(1, (x1 - x0) * k * pad), boxH = Math.max(1, (y1 - y0) * k * pad);
+        const imgLeft = (W - dispImgW) / 2, imgTop = (H - dispImgH) / 2;
+        const cx = imgLeft + (x0 + x1) / 2 * k;
+        const cy = imgTop + (y0 + y1) / 2 * k;
+        const s = Math.max(1, Math.min(6, Math.min(W / boxW, H / boxH)));
+        // desired translate to centre the block, then CLAMP so the scaled
+        // image always covers the viewport (no dead space / one-side clipping)
+        let ntx = -(cx - W / 2) * s;
+        let nty = -(cy - H / 2) * s;
+        const scaledW = dispImgW * s, scaledH = dispImgH * s;
+        const maxX = Math.max(0, (scaledW - W) / 2), maxY = Math.max(0, (scaledH - H) / 2);
+        ntx = Math.max(-maxX, Math.min(maxX, ntx));
+        nty = Math.max(-maxY, Math.min(maxY, nty));
+        setScale(s);
+        setTx(ntx);
+        setTy(nty);
+    };
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
+        const t = setTimeout(()=>{
+            if (focusBox && mode === 'block') fitToBox(focusBox);
+        }, 60);
+        return ()=>clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        focusBox,
+        image.base64
+    ]);
     const onDown = (e)=>{
         dragging.current = {
             x: e.clientX - tx,
@@ -307,6 +352,7 @@ function PlanViewer({ image, points, pipes, riser }) {
         dragging.current = null;
     };
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        ref: containerRef,
         "data-testid": "plan-viewer",
         className: "relative border border-slate-300 bg-slate-900 overflow-hidden select-none",
         style: {
@@ -323,7 +369,7 @@ function PlanViewer({ image, points, pipes, riser }) {
                         children: "+"
                     }, void 0, false, {
                         fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                        lineNumber: 42,
+                        lineNumber: 78,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -333,27 +379,43 @@ function PlanViewer({ image, points, pipes, riser }) {
                         children: "−"
                     }, void 0, false, {
                         fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                        lineNumber: 44,
+                        lineNumber: 80,
                         columnNumber: 17
+                    }, this),
+                    focusBox && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                        "data-testid": "viewer-fit-block",
+                        title: "Fit to floor-plan block",
+                        onClick: ()=>{
+                            setMode('block');
+                            fitToBox(focusBox);
+                        },
+                        className: "w-8 h-8 bg-[#0A192F] hover:bg-slate-700 text-white text-[9px] font-bold border border-slate-700",
+                        children: "BLK"
+                    }, void 0, false, {
+                        fileName: "[project]/frontend/src/components/PlanViewer.tsx",
+                        lineNumber: 83,
+                        columnNumber: 21
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                         "data-testid": "viewer-reset",
+                        title: "Fit whole sheet",
                         onClick: ()=>{
+                            setMode('sheet');
                             setScale(1);
                             setTx(0);
                             setTy(0);
                         },
                         className: "w-8 h-8 bg-white/90 hover:bg-white text-slate-900 text-[10px] font-bold border border-slate-300",
-                        children: "⟳"
+                        children: "⤢"
                     }, void 0, false, {
                         fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                        lineNumber: 46,
+                        lineNumber: 87,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                lineNumber: 41,
+                lineNumber: 77,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -391,7 +453,7 @@ function PlanViewer({ image, points, pipes, riser }) {
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                                lineNumber: 58,
+                                lineNumber: 99,
                                 columnNumber: 25
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
@@ -413,7 +475,7 @@ function PlanViewer({ image, points, pipes, riser }) {
                                             strokeDasharray: p.kind === 'riser' ? '' : '10,6'
                                         }, `pipe-${i}`, false, {
                                             fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                                            lineNumber: 72,
+                                            lineNumber: 113,
                                             columnNumber: 33
                                         }, this)),
                                     points.map((pt, i)=>{
@@ -429,7 +491,7 @@ function PlanViewer({ image, points, pipes, riser }) {
                                                 strokeWidth: 2
                                             }, i, false, {
                                                 fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                                                lineNumber: 80,
+                                                lineNumber: 121,
                                                 columnNumber: 44
                                             }, this);
                                         }
@@ -442,7 +504,7 @@ function PlanViewer({ image, points, pipes, riser }) {
                                                 strokeWidth: 2
                                             }, i, false, {
                                                 fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                                                lineNumber: 85,
+                                                lineNumber: 126,
                                                 columnNumber: 44
                                             }, this);
                                         }
@@ -456,44 +518,44 @@ function PlanViewer({ image, points, pipes, riser }) {
                                             fillOpacity: st.shape === 'dot' ? 0.85 : 1
                                         }, i, false, {
                                             fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                                            lineNumber: 88,
+                                            lineNumber: 129,
                                             columnNumber: 40
                                         }, this);
                                     })
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                                lineNumber: 65,
+                                lineNumber: 106,
                                 columnNumber: 25
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                        lineNumber: 56,
+                        lineNumber: 97,
                         columnNumber: 21
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                    lineNumber: 54,
+                    lineNumber: 95,
                     columnNumber: 17
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                lineNumber: 50,
+                lineNumber: 91,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "absolute bottom-2 left-2 z-20 text-[10px] text-white/70 bg-black/40 px-2 py-1 font-mono",
-                children: "Drag to pan · +/− to zoom · markers stay anchored to the drawing"
+                className: "absolute bottom-2 left-2 z-20 text-[10px] text-white bg-black/70 px-2 py-1 font-mono rounded-sm",
+                children: "Drag to pan · +/− zoom · BLK = fit block · ⤢ = whole sheet"
             }, void 0, false, {
                 fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-                lineNumber: 95,
+                lineNumber: 136,
                 columnNumber: 13
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/frontend/src/components/PlanViewer.tsx",
-        lineNumber: 39,
+        lineNumber: 75,
         columnNumber: 9
     }, this);
 }
@@ -573,12 +635,12 @@ function PlanSections() {
                             children: "Plan Reference — Sanctioned-Plan Metadata"
                         }, void 0, false, {
                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                            lineNumber: 78,
+                            lineNumber: 79,
                             columnNumber: 25
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                        lineNumber: 77,
+                        lineNumber: 78,
                         columnNumber: 21
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -589,7 +651,7 @@ function PlanSections() {
                                 children: "Administrative / traceability data extracted from the plan. Reference only — never used in any compliance calculation."
                             }, void 0, false, {
                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                lineNumber: 81,
+                                lineNumber: 82,
                                 columnNumber: 25
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -602,7 +664,7 @@ function PlanSections() {
                                                 children: k.replace(/_/g, ' ')
                                             }, void 0, false, {
                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                lineNumber: 85,
+                                                lineNumber: 86,
                                                 columnNumber: 37
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -610,18 +672,18 @@ function PlanSections() {
                                                 children: String(v)
                                             }, void 0, false, {
                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                lineNumber: 86,
+                                                lineNumber: 87,
                                                 columnNumber: 37
                                             }, this)
                                         ]
                                     }, k, true, {
                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                        lineNumber: 84,
+                                        lineNumber: 85,
                                         columnNumber: 33
                                     }, this))
                             }, void 0, false, {
                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                lineNumber: 82,
+                                lineNumber: 83,
                                 columnNumber: 25
                             }, this),
                             ref.earlier_approved_case ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -632,7 +694,7 @@ function PlanSections() {
                                         children: "Earlier approved case (linked reference)"
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                        lineNumber: 92,
+                                        lineNumber: 93,
                                         columnNumber: 33
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -640,25 +702,25 @@ function PlanSections() {
                                         children: String(ref.earlier_approved_case.raw)
                                     }, void 0, false, {
                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                        lineNumber: 93,
+                                        lineNumber: 94,
                                         columnNumber: 33
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                lineNumber: 91,
+                                lineNumber: 92,
                                 columnNumber: 29
                             }, this) : null
                         ]
                     }, void 0, true, {
                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                        lineNumber: 80,
+                        lineNumber: 81,
                         columnNumber: 21
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                lineNumber: 76,
+                lineNumber: 77,
                 columnNumber: 17
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -672,12 +734,12 @@ function PlanSections() {
                             children: "Suggested Equipment Quantities"
                         }, void 0, false, {
                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                            lineNumber: 103,
+                            lineNumber: 104,
                             columnNumber: 21
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                        lineNumber: 102,
+                        lineNumber: 103,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -688,7 +750,7 @@ function PlanSections() {
                                 children: 'Suggested quantities are advisory. Lines marked "Estimated per …" use industry-standard assumptions not explicit in NBC Part 4 and must be confirmed by a licensed fire protection engineer.'
                             }, void 0, false, {
                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                lineNumber: 106,
+                                lineNumber: 107,
                                 columnNumber: 21
                             }, this),
                             loading ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -696,14 +758,14 @@ function PlanSections() {
                                 children: "Computing…"
                             }, void 0, false, {
                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                lineNumber: 109,
+                                lineNumber: 110,
                                 columnNumber: 32
                             }, this) : quantities.length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                 className: "text-xs text-slate-400",
                                 children: "No equipment quantities were triggered for this building."
                             }, void 0, false, {
                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                lineNumber: 110,
+                                lineNumber: 111,
                                 columnNumber: 25
                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: "border border-slate-200 overflow-x-auto",
@@ -720,7 +782,7 @@ function PlanSections() {
                                                         children: "Equipment"
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                        lineNumber: 116,
+                                                        lineNumber: 117,
                                                         columnNumber: 41
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -728,7 +790,7 @@ function PlanSections() {
                                                         children: "Qty"
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                        lineNumber: 117,
+                                                        lineNumber: 118,
                                                         columnNumber: 41
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -736,7 +798,7 @@ function PlanSections() {
                                                         children: "Formula used"
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                        lineNumber: 118,
+                                                        lineNumber: 119,
                                                         columnNumber: 41
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -744,18 +806,18 @@ function PlanSections() {
                                                         children: "Source"
                                                     }, void 0, false, {
                                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                        lineNumber: 119,
+                                                        lineNumber: 120,
                                                         columnNumber: 41
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                lineNumber: 115,
+                                                lineNumber: 116,
                                                 columnNumber: 37
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 114,
+                                            lineNumber: 115,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -767,7 +829,7 @@ function PlanSections() {
                                                             children: q.equipment
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                            lineNumber: 125,
+                                                            lineNumber: 126,
                                                             columnNumber: 45
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -779,7 +841,7 @@ function PlanSections() {
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                            lineNumber: 126,
+                                                            lineNumber: 127,
                                                             columnNumber: 45
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -787,7 +849,7 @@ function PlanSections() {
                                                             children: q.formula
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                            lineNumber: 127,
+                                                            lineNumber: 128,
                                                             columnNumber: 45
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -797,46 +859,46 @@ function PlanSections() {
                                                                 children: q.source
                                                             }, void 0, false, {
                                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                lineNumber: 129,
+                                                                lineNumber: 130,
                                                                 columnNumber: 49
                                                             }, this)
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                            lineNumber: 128,
+                                                            lineNumber: 129,
                                                             columnNumber: 45
                                                         }, this)
                                                     ]
                                                 }, i, true, {
                                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                    lineNumber: 124,
+                                                    lineNumber: 125,
                                                     columnNumber: 41
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 122,
+                                            lineNumber: 123,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                    lineNumber: 113,
+                                    lineNumber: 114,
                                     columnNumber: 29
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                lineNumber: 112,
+                                lineNumber: 113,
                                 columnNumber: 25
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                        lineNumber: 105,
+                        lineNumber: 106,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                lineNumber: 101,
+                lineNumber: 102,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -850,12 +912,12 @@ function PlanSections() {
                             children: "Suggested Equipment Placement (on the plan)"
                         }, void 0, false, {
                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                            lineNumber: 143,
+                            lineNumber: 144,
                             columnNumber: 21
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                        lineNumber: 142,
+                        lineNumber: 143,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -865,7 +927,7 @@ function PlanSections() {
                             children: "Preparing placement…"
                         }, void 0, false, {
                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                            lineNumber: 147,
+                            lineNumber: 148,
                             columnNumber: 25
                         }, this) : !placement?.available ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             "data-testid": "placement-unavailable",
@@ -876,14 +938,14 @@ function PlanSections() {
                                     children: "Placement not available — "
                                 }, void 0, false, {
                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                    lineNumber: 150,
+                                    lineNumber: 151,
                                     columnNumber: 29
                                 }, this),
                                 placement?.reason || 'This analysis did not originate from an uploaded plan with usable geometry.'
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                            lineNumber: 149,
+                            lineNumber: 150,
                             columnNumber: 25
                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             className: "space-y-4",
@@ -904,7 +966,7 @@ function PlanSections() {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 156,
+                                            lineNumber: 157,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -918,7 +980,7 @@ function PlanSections() {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 157,
+                                            lineNumber: 158,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -926,13 +988,13 @@ function PlanSections() {
                                             children: placement.sanity?.ok ? 'Spacing sanity-check: OK' : 'Spacing deviation flagged'
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 158,
+                                            lineNumber: 159,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                    lineNumber: 155,
+                                    lineNumber: 156,
                                     columnNumber: 29
                                 }, this),
                                 placement.calibration?.conflict ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -943,7 +1005,7 @@ function PlanSections() {
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                    lineNumber: 161,
+                                    lineNumber: 162,
                                     columnNumber: 33
                                 }, this) : null,
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -956,10 +1018,11 @@ function PlanSections() {
                                                     image: placement.pageImage,
                                                     points: placement.points || [],
                                                     pipes: placement.pipes || [],
-                                                    riser: placement.riser
+                                                    riser: placement.riser,
+                                                    focusBox: placement.block?.bboxPx
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                    lineNumber: 167,
+                                                    lineNumber: 168,
                                                     columnNumber: 41
                                                 }, this),
                                                 placement.overlayNote ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -968,7 +1031,7 @@ function PlanSections() {
                                                     children: placement.overlayNote
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                    lineNumber: 170,
+                                                    lineNumber: 172,
                                                     columnNumber: 41
                                                 }, this) : null,
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -980,7 +1043,7 @@ function PlanSections() {
                                                             children: "Legend"
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                            lineNumber: 176,
+                                                            lineNumber: 178,
                                                             columnNumber: 41
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -992,31 +1055,31 @@ function PlanSections() {
                                                                             className: LEGEND_SWATCH[l.symbol] || 'w-3 h-3 bg-slate-400'
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                            lineNumber: 180,
+                                                                            lineNumber: 182,
                                                                             columnNumber: 53
                                                                         }, this),
                                                                         l.label
                                                                     ]
                                                                 }, i, true, {
                                                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                    lineNumber: 179,
+                                                                    lineNumber: 181,
                                                                     columnNumber: 49
                                                                 }, this))
                                                         }, void 0, false, {
                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                            lineNumber: 177,
+                                                            lineNumber: 179,
                                                             columnNumber: 41
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                    lineNumber: 175,
+                                                    lineNumber: 177,
                                                     columnNumber: 37
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 165,
+                                            lineNumber: 166,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1027,7 +1090,7 @@ function PlanSections() {
                                                     children: "Suggested positions"
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                    lineNumber: 189,
+                                                    lineNumber: 191,
                                                     columnNumber: 37
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1045,7 +1108,7 @@ function PlanSections() {
                                                                             children: "Equipment"
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                            lineNumber: 194,
+                                                                            lineNumber: 196,
                                                                             columnNumber: 53
                                                                         }, this),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1053,7 +1116,7 @@ function PlanSections() {
                                                                             children: "Location"
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                            lineNumber: 195,
+                                                                            lineNumber: 197,
                                                                             columnNumber: 53
                                                                         }, this),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1061,18 +1124,18 @@ function PlanSections() {
                                                                             children: "Rule"
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                            lineNumber: 196,
+                                                                            lineNumber: 198,
                                                                             columnNumber: 53
                                                                         }, this)
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                    lineNumber: 193,
+                                                                    lineNumber: 195,
                                                                     columnNumber: 49
                                                                 }, this)
                                                             }, void 0, false, {
                                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                lineNumber: 192,
+                                                                lineNumber: 194,
                                                                 columnNumber: 45
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -1084,7 +1147,7 @@ function PlanSections() {
                                                                                 children: r.equipment
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                                lineNumber: 202,
+                                                                                lineNumber: 204,
                                                                                 columnNumber: 57
                                                                             }, this),
                                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1092,7 +1155,7 @@ function PlanSections() {
                                                                                 children: r.location
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                                lineNumber: 203,
+                                                                                lineNumber: 205,
                                                                                 columnNumber: 57
                                                                             }, this),
                                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1100,41 +1163,41 @@ function PlanSections() {
                                                                                 children: r.clause
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                                lineNumber: 204,
+                                                                                lineNumber: 206,
                                                                                 columnNumber: 57
                                                                             }, this)
                                                                         ]
                                                                     }, i, true, {
                                                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                        lineNumber: 201,
+                                                                        lineNumber: 203,
                                                                         columnNumber: 53
                                                                     }, this))
                                                             }, void 0, false, {
                                                                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                                lineNumber: 199,
+                                                                lineNumber: 201,
                                                                 columnNumber: 45
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                        lineNumber: 191,
+                                                        lineNumber: 193,
                                                         columnNumber: 41
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                                    lineNumber: 190,
+                                                    lineNumber: 192,
                                                     columnNumber: 37
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 188,
+                                            lineNumber: 190,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                    lineNumber: 164,
+                                    lineNumber: 165,
                                     columnNumber: 29
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1145,7 +1208,7 @@ function PlanSections() {
                                             children: placement.disclaimerPlacement
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 214,
+                                            lineNumber: 216,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$frontend$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1153,30 +1216,30 @@ function PlanSections() {
                                             children: placement.disclaimerRouting
                                         }, void 0, false, {
                                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                            lineNumber: 215,
+                                            lineNumber: 217,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                                    lineNumber: 213,
+                                    lineNumber: 215,
                                     columnNumber: 29
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                            lineNumber: 153,
+                            lineNumber: 154,
                             columnNumber: 25
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                        lineNumber: 145,
+                        lineNumber: 146,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/frontend/src/components/PlanSections.tsx",
-                lineNumber: 141,
+                lineNumber: 142,
                 columnNumber: 13
             }, this)
         ]

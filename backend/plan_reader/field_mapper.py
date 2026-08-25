@@ -45,8 +45,9 @@ def build_mapping(text: str, type1: dict | None, type2: dict | None) -> dict:
     m = re.search(r"(?:NAME\s+OF\s+(?:PROJECT|BUILDING|OWNER)|PROJECT)\s*[:\-]\s*([A-Za-z0-9 ,.&'\-]{3,60})", text, re.IGNORECASE)
     if m:
         proj = m.group(1).strip()
-        fields.append(_field("project", "projectName", "Project Name", proj, "", "medium", "Text on plan"))
-        prefill["projectName"] = proj
+        if proj.upper().strip(" .-") not in ("NA", "N.A", "NIL", "NONE", "-"):
+            fields.append(_field("project", "projectName", "Project Name", proj, "", "medium", "Text on plan"))
+            prefill["projectName"] = proj
 
     # ── City / State ──
     for city_kw in ["AHMEDABAD", "MUMBAI", "SURAT", "VADODARA", "RAJKOT", "PUNE", "DELHI", "BENGALURU", "CHENNAI", "HYDERABAD"]:

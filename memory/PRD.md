@@ -53,11 +53,35 @@ validation, unit inference, column-label exclusion, and honest fallback.
 - No regression: Manual Entry clears the plan session; plan-only report sections are
   absent on manual/legacy sessions (verified).
 
+## Iteration 2/3 (real files + follow-ups) — done
+Real sample files (5) tested through the pipeline:
+- digigov_plan: Type 1/2/3 ALL found; Plan Reference CLEAN (odps_inward_no
+  ODPS/2025/120600, scale 1:200; column-bleed garbage rejected by ref-validation);
+  multi-block per-scale (Ground/First Floor Plan @ 1:200); placement available with a
+  tight block bbox (~10-17% of sheet), sprinkler markers capped at 250 + honest note.
+- Al Makka: unit correctly inferred as FEET + N.T.S.; column cross-section labels
+  (e.g. C5 12"X27") excluded from dims; floor block geometry detected.
+- Kasturba / SOT / Hotel Silver Plate: N.T.S. handled with honest low/medium
+  calibration; extractionPath vector_text.
+Follow-up tasks completed:
+- Performance: extract now two-pass (text-only all pages, geometry only on the floor
+  page); find_tables() dropped (too slow on dense CAD); geometry cap 40k segs. Placement
+  reuses cached blocks+image → dropped from ~43s to ~0.03s.
+- Confirm Flow Repair: legacy `/confirm` now posts to `/api/analyze-mixed` with a
+  derived occupancy (was hitting the broken `/api/analyze-manual`). Verified working.
+- DWG→DXF optional converter hook (`_try_dwg_to_dxf`, auto-detects `dwg2dxf`/
+  `PLAN_DWG2DXF_CMD`); honest fallback when no converter present (current env).
+- Fit-To-Block: viewer auto-zooms to the analysed floor-plan block with pan clamped to
+  image bounds; BLK / fit-sheet / zoom controls.
+- Fixed a self-introduced regression (percentile bbox collapsed on sparse blocks) —
+  percentile trim now applies only with >=20 segments, else full endpoint bbox.
+Verified by testing agent iteration_2/iteration_3 (backend 100%, frontend flows pass).
+
 ## Known / out of scope
 - PRE-EXISTING bug (NOT this build): `/api/analyze-manual` raises inside the unmodified
-  engine (standards_engine when nbc_compliance is None) and the legacy `/confirm` page
-  that uses it is therefore broken. Not fixed — engine is out of scope. New upload flow
-  uses `/api/analyze-mixed` (works).
+  engine (standards_engine when nbc_compliance is None). The legacy `/confirm` page no
+  longer uses it (now posts to `/api/analyze-mixed`); the endpoint itself is left as-is
+  since the engine is out of scope.
 - 13 pre-existing failures in `tests/test_rule_engine.py` (assert older IS-2190 counts);
   unrelated to this build.
 - Real sample files (KASTURBA_GANDHI, SOT_ALL_FLOOR, Al Makka, digigov_plan, Hotel

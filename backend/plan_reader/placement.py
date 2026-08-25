@@ -83,6 +83,8 @@ def compute_placement(
 
     # ── Sprinkler grid (if sprinkler system required) ──
     sprinkler_positions = []
+    sprinkler_truncated = 0
+    MAX_SPRINKLER_MARKERS = 250
     if required("sprinkler_system") or detectors.get("totalSprinklers"):
         yy = iy0
         while yy <= iy1 + 1:
@@ -91,6 +93,12 @@ def compute_placement(
                 sprinkler_positions.append((xx, yy))
                 xx += step
             yy += step
+        # Cap markers for readability/performance; subsample evenly if huge.
+        if len(sprinkler_positions) > MAX_SPRINKLER_MARKERS:
+            full = len(sprinkler_positions)
+            stride = full / MAX_SPRINKLER_MARKERS
+            sprinkler_positions = [sprinkler_positions[int(i * stride)] for i in range(MAX_SPRINKLER_MARKERS)]
+            sprinkler_truncated = full
         for (px, py) in sprinkler_positions:
             points.append({"type": "sprinkler", "x": round(px, 1), "y": round(py, 1),
                            "floor": floor_label, "clause": "NBC Part 4 Table 7 / IS 15105"})
@@ -137,17 +145,21 @@ def compute_placement(
     engine_total = int(detectors.get("totalSprinklers") or 0)
     overlay_note = None
     if sprinkler_positions:
+        shown = len(sprinkler_positions)
+        label = f"{shown} heads shown" + (f" of {sprinkler_truncated} on this block (subsampled)" if sprinkler_truncated else "")
         note = f"{spacing_m:g} m grid, {REF_WALL_OFFSET_M:g} m wall offset, across block"
-        side.insert(0, {"equipment": f"Sprinkler grid ({len(sprinkler_positions)} heads shown)",
+        side.insert(0, {"equipment": f"Sprinkler grid ({label})",
                         "floor": floor_label,
                         "location": note,
                         "clause": "NBC Part 4 Table 7 / IS 15105"})
-        if engine_total and engine_total != len(sprinkler_positions):
-            overlay_note = (
-                f"The overlay shows {len(sprinkler_positions)} sprinkler heads within the detected "
-                f"'{block.title}' block only. The engine's building-wide total is {engine_total} heads "
-                f"(all floors / full built-up area) — see the Suggested Equipment Quantities table."
-            )
+        parts = []
+        if sprinkler_truncated:
+            parts.append(f"The overlay draws a representative {shown}-head subsample of ~{sprinkler_truncated} grid positions within the detected '{block.title}' block (capped for readability).")
+        else:
+            parts.append(f"The overlay shows {shown} sprinkler heads within the detected '{block.title}' block only.")
+        if engine_total:
+            parts.append(f"The engine's building-wide total is {engine_total} heads (all floors / full built-up area) — see the Suggested Equipment Quantities table.")
+        overlay_note = " ".join(parts)
 
     # ── Sanity check vs real-world reference pattern (point 5) ──
     sanity = _sanity_check(spacing_m)

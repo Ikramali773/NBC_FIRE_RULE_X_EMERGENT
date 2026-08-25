@@ -177,8 +177,9 @@ async def analyze_mixed(body: MixedAnalyzeInput):
 
         total_area = sum(body.floor_areas) + (body.basement_area or 0)
 
+        default_name = "Mixed-Occupancy Building" if sel.mode == "mixed" else (f"{primary} Building" if primary else "Untitled Building")
         building_input = BuildingInput(
-            buildingName=body.project_name or "Mixed-Occupancy Building",
+            buildingName=body.project_name or default_name,
             buildingType=primary or "Mixed",
             totalFloorArea=total_area,
             numberOfFloors=len(body.floor_areas),

@@ -58,6 +58,10 @@ class TestPlanExtract:
     def test_tables_found(self, extraction):
         assert extraction["tablesFound"] == {"type1": True, "type2": True, "type3": True}
 
+    # REGRESSION (iteration_2): geometryAvailable was True in iteration_1 and is
+    # now False for the synthetic fixture. Cause: the new percentile-trimmed
+    # _block_bbox_around() in plan_reader/scale_detector.py collapses the bbox on
+    # sparse-geometry blocks, so _bbox_has_geometry() sees < 4 segments.
     def test_geometry_and_page_image(self, extraction):
         assert extraction["geometryAvailable"] is True
         assert extraction["planId"]

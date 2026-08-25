@@ -27,6 +27,7 @@ interface PlacementResp {
     sideTable?: Array<{ equipment: string; floor: string; location: string; clause: string }>;
     legend?: Array<{ symbol: string; label: string }>;
     calibration?: Record<string, unknown>;
+    block?: { id: string; title: string; bboxPx: number[] };
     sanity?: { ok: boolean; reference: string; note: string };
     overlayNote?: string | null;
     spacingM?: number; wallOffsetM?: number; pxPerM?: number;
@@ -164,7 +165,8 @@ export default function PlanSections() {
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                 <div className="lg:col-span-2">
                                     {placement.pageImage && (
-                                        <PlanViewer image={placement.pageImage} points={placement.points || []} pipes={placement.pipes || []} riser={placement.riser} />
+                                        <PlanViewer image={placement.pageImage} points={placement.points || []} pipes={placement.pipes || []} riser={placement.riser}
+                                            focusBox={(placement.block as { bboxPx?: number[] } | undefined)?.bboxPx} />
                                     )}
                                     {placement.overlayNote ? (
                                         <p data-testid="placement-overlay-note" className="mt-2 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 px-3 py-2 leading-relaxed">

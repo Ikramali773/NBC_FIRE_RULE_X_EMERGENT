@@ -50,6 +50,31 @@ class Block:
     conflict: str | None = None
     has_geometry: bool = False
 
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "title": self.title, "bbox": list(self.bbox),
+            "is_floor_plan": self.is_floor_plan, "scale_note": self.scale_note,
+            "unit": self.unit, "unit_source": self.unit_source, "nts": self.nts,
+            "calibrated_pt_per_m": self.calibrated_pt_per_m,
+            "calibration_confidence": self.calibration_confidence,
+            "calibration_source": self.calibration_source, "conflict": self.conflict,
+            "has_geometry": self.has_geometry,
+        }
+
+    @staticmethod
+    def from_dict(d: dict) -> "Block":
+        b = Block(id=d["id"], title=d["title"], bbox=tuple(d["bbox"]),
+                  is_floor_plan=d["is_floor_plan"])
+        b.scale_note = d.get("scale_note")
+        b.unit = d.get("unit"); b.unit_source = d.get("unit_source", "inferred")
+        b.nts = d.get("nts", False)
+        b.calibrated_pt_per_m = d.get("calibrated_pt_per_m")
+        b.calibration_confidence = d.get("calibration_confidence", "low")
+        b.calibration_source = d.get("calibration_source", "none")
+        b.conflict = d.get("conflict")
+        b.has_geometry = d.get("has_geometry", False)
+        return b
+
 
 def _parse_scale_note(s: str) -> tuple[str | None, float | None, float | None]:
     """Return (normalised_note, ratio_denominator, pt_per_m).
@@ -228,9 +253,31 @@ def _block_bbox_around(page: PageData, anchor: Word) -> tuple[float, float, floa
         h = page.height * 0.4
         return (max(0, anchor.cx - w / 2), anchor.cy,
                 min(page.width, anchor.cx + w / 2), min(page.height, anchor.cy + h))
-    xs = [c for s in region_lines for c in (s.x0, s.x1)]
-    ys = [c for s in region_lines for c in (s.y0, s.y1)]
-    return (min(xs), min(ys), max(xs), max(ys))
+
+    # Full endpoint bbox (robust baseline).
+    exs = [c for s in region_lines for c in (s.x0, s.x1)]
+    eys = [c for s in region_lines for c in (s.y0, s.y1)]
+    fx0, fy0, fx1, fy1 = min(exs), min(eys), max(exs), max(eys)
+
+    # Only apply the percentile trim (to reject bleed from adjacent blocks on
+    # dense sheets) when there is ENOUGH geometry for it to be meaningful.
+    # On sparse blocks a percentile of a handful of midpoints collapses to a
+    # zero-area box, so we keep the full endpoint bbox there.
+    if len(region_lines) >= 20:
+        mxs = sorted((s.x0 + s.x1) / 2 for s in region_lines)
+        mys = sorted((s.y0 + s.y1) / 2 for s in region_lines)
+
+        def pct(vals, p):
+            i = min(len(vals) - 1, max(0, int(p * (len(vals) - 1))))
+            return vals[i]
+
+        bx0, by0, bx1, by1 = pct(mxs, 0.08), pct(mys, 0.08), pct(mxs, 0.92), pct(mys, 0.92)
+        # guard against a collapsed trim — fall back to full bbox if degenerate
+        if (bx1 - bx0) < 20 or (by1 - by0) < 20:
+            return (fx0, fy0, fx1, fy1)
+        return (bx0, by0, bx1, by1)
+
+    return (fx0, fy0, fx1, fy1)
 
 
 def _bbox_has_geometry(page: PageData, bbox) -> bool:
@@ -265,8 +312,8 @@ def _calibrate_block(b: Block, page: PageData, near: Word | None = None) -> None
     b.unit, b.unit_source = unit, unit_src
 
     note = _nearest_scale_note(page, near)
-    b.scale_note = note
     norm, denom, pt_per_m_note = _parse_scale_note(note or "")
+    b.scale_note = norm or note
     if norm == "N.T.S.":
         b.nts = True
     b.scale_ratio = denom

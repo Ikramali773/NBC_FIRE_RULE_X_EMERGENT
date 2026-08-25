@@ -65,18 +65,31 @@ class PlanDocument:
         self.filename = filename
         self.error: Optional[str] = None
         self.doc: Optional[fitz.Document] = None
+        self.converted_from: Optional[str] = None
         self.original_format = _detect_format(filename, data)
 
         if self.original_format == "dwg":
-            # True DWG is a proprietary binary CAD format. Reading it
-            # reliably needs an external converter (ODA/LibreDWG) which is
-            # NOT installed and is not zero-cost to bundle. Degrade
-            # gracefully and honestly rather than guessing.
+            # True DWG is a proprietary binary CAD format. Reading it needs an
+            # external converter. We support an OPTIONAL DWG→DXF step: if a
+            # converter binary is available (LibreDWG `dwg2dxf`, ODA File
+            # Converter, or a custom command via PLAN_DWG2DXF_CMD), we use it;
+            # otherwise we degrade gracefully and ask for a PDF/DXF export.
+            dxf_bytes = _try_dwg_to_dxf(data, filename)
+            if dxf_bytes is not None:
+                try:
+                    self.doc = fitz.open(stream=dxf_bytes, filetype="dxf")
+                    self.original_format = "dxf"  # converted
+                    self.converted_from = "dwg"
+                    return
+                except Exception as exc:  # pragma: no cover
+                    self.error = f"DWG was converted to DXF but could not be opened: {exc}"
+                    return
             self.error = (
                 "DWG is a binary CAD format that requires an external "
-                "converter (e.g. ODA File Converter → DXF/PDF), which is "
-                "not configured. Please export the plan to PDF (or DXF) "
-                "and re-upload. All other features remain available."
+                "converter (e.g. LibreDWG `dwg2dxf` or ODA File Converter). No "
+                "converter is configured, so DWG could not be read. Please "
+                "export the plan to PDF (or DXF) and re-upload, or install a "
+                "converter and set PLAN_DWG2DXF_CMD. All other features remain available."
             )
             return
 
@@ -101,7 +114,7 @@ class PlanDocument:
         return self.doc.page_count if self.doc else 0
 
     # ── extraction ───────────────────────────────────────────────
-    def read_page(self, index: int) -> PageData:
+    def read_page(self, index: int, with_geometry: bool = True, with_tables: bool = True) -> PageData:
         page = self.doc[index]
         rect = page.rect
         text = page.get_text("text") or ""
@@ -113,8 +126,11 @@ class PlanDocument:
             if txt:
                 words.append(Word(w[0], w[1], w[2], w[3], txt))
 
-        lines = _extract_lines(page)
-        tables = _extract_tables(page)
+        lines = _extract_lines(page) if with_geometry else []
+        # find_tables() is O(very slow) on dense CAD sheets (tens of seconds),
+        # so it is opt-in. The text layer + regex table parser covers the
+        # Type 1/2/3 patterns without it.
+        tables = _extract_tables(page) if with_tables else []
 
         # scanned detection: little/no extractable text + large raster image
         image_area = 0.0
@@ -157,6 +173,43 @@ class PlanDocument:
 # ── helpers ──────────────────────────────────────────────────────
 
 
+def _try_dwg_to_dxf(data: bytes, filename: str) -> bytes | None:
+    """OPTIONAL DWG→DXF conversion via an external binary, if available.
+
+    Resolution order:
+      1. $PLAN_DWG2DXF_CMD  (custom command; use {in}/{out} placeholders)
+      2. `dwg2dxf`          (LibreDWG)
+    Returns DXF bytes, or None when no converter is configured/succeeds.
+    """
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        in_path = os.path.join(td, "in.dwg")
+        out_path = os.path.join(td, "out.dxf")
+        with open(in_path, "wb") as fh:
+            fh.write(data)
+
+        custom = os.environ.get("PLAN_DWG2DXF_CMD")
+        cmd = None
+        if custom:
+            cmd = custom.replace("{in}", in_path).replace("{out}", out_path).split()
+        elif shutil.which("dwg2dxf"):
+            cmd = ["dwg2dxf", "-o", out_path, in_path]
+        if not cmd:
+            return None
+        try:
+            subprocess.run(cmd, timeout=60, capture_output=True, check=False)
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                with open(out_path, "rb") as fh:
+                    return fh.read()
+        except Exception as exc:  # pragma: no cover - optional path
+            print(f"[plan_reader] DWG→DXF conversion failed: {exc}")
+        return None
+
+
 def _detect_format(filename: str, data: bytes) -> str:
     name = (filename or "").lower()
     head = data[:512]
@@ -173,8 +226,13 @@ def _detect_format(filename: str, data: bytes) -> str:
     return "pdf"
 
 
-def _extract_lines(page: "fitz.Page") -> list[LineSeg]:
-    """Pull straight line segments from the page's vector drawings."""
+def _extract_lines(page: "fitz.Page", max_segs: int = 40000) -> list[LineSeg]:
+    """Pull straight line segments from the page's vector drawings.
+
+    Bounded by max_segs so a pathological CAD sheet (hundreds of thousands
+    of ops) can't blow up memory/time — a floor-plan bbox and geometry
+    presence are still well-established from a large sample.
+    """
     segs: list[LineSeg] = []
     try:
         drawings = page.get_drawings()
@@ -192,6 +250,8 @@ def _extract_lines(page: "fitz.Page") -> list[LineSeg]:
                 segs.append(LineSeg(r.x1, r.y0, r.x1, r.y1))
                 segs.append(LineSeg(r.x1, r.y1, r.x0, r.y1))
                 segs.append(LineSeg(r.x0, r.y1, r.x0, r.y0))
+            if len(segs) >= max_segs:
+                return segs
     return segs
 
 

@@ -1,0 +1,55 @@
+{
+  "summary": "Iteration-3 re-test of the plan-reader/placement layer. NEW SUITE /app/backend/tests/test_iteration3_regression.py (12 cases, 12 PASS) confirms the HIGH-priority sparse-geometry bbox regression is FIXED: _synthetic_plan.pdf now returns geometryAvailable=true with 'Ground Floor Plan' bbox [560,270,900,525] (340x255, hasGeometry=true) and /api/plan/placement (A-4, 22.5m, 7x437, kitchen+sprinkler) returns available=true, block covers 17.3% of the page, 16 points. digigov.pdf still good end-to-end (extract 200 in 11s, Type1/2/3 all true, clean odps_inward_no ODPS/2025/120600 + planReference scale 1:200, placement available in 0.17s cached, 247 sprinkler markers <=250, overlayNote + sideTable + legend). Floor-page selection fixed: kasturba.pdf now yields 'Ground Floor' isFloorPlan+hasGeometry (bbox 556x270) alongside 'Key Plan'; almakka.pdf has a non-degenerate 'Floor Plan' block (512x745, hasGeometry) with unit='ft' and nts=true on all floor blocks. Legacy suite /app/backend/tests/test_real_plans.py now 19/19 PASS after updating 2 stale assertions (see updated_files). Frontend: /confirm?manual=true testids all present and the flow reaches a valid /results report (after also filling the per-floor area inputs); fit-to-block on digigov auto-zooms to scale 1.2396 with the image FILLING the 735x520 viewport (img rect -70,-29 908x642 -> pan correctly clamped, no dead space) and all 4 viewer buttons change the transform; placement-overlay-note/side-table/legend all render. /manual (A-4, 20m, 3x500) gives a standard report with NONE of report-plan-reference/report-equipment-quantities/report-equipment-placement.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/plan/extract (synthetic fixture)", "issue": "Non-floor block 'Area Statement' (block-1) still gets a zero-WIDTH bbox [560.0,270.0,560.0,525.0] (all region lines share one x). Harmless today (hasGeometry=false, not used for placement) but a min-span clamp in _block_bbox_around would make it honest."},
+      {"endpoint": "/api/plan/extract (digigov.pdf)", "issue": "BEHAVIOUR CHANGE, verified NOT a bug: the new text scorer now picks page 2 (5 strong floor titles) whose sheet scale is genuinely 1:100, so per-block scaleNote is 1:100 while planReference.scale (title-block page 0) stays 1:200. Two scales shown in the same report may confuse users - consider labelling the block scale as 'sheet scale of the floor-plan page'."},
+      {"endpoint": "/api/plan/extract (almakka.pdf)", "issue": "The two 'Ground Floor Plan'/'Ground Floor' blocks have hasGeometry=false and a squat bbox anchored at x0=0 (e.g. [0,3206,826,3370]); only the generic 'Floor Plan' block is usable. Anchor-region growth still under-covers those titles."},
+      {"endpoint": "/api/analyze-manual", "issue": "PRE-EXISTING engine bug (400 on valid payload). Endpoint is now unused by the UI - not re-investigated per instructions."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "confirm/page.tsx", "issue": "HIGH-ish for the requested flow: filling only confirm-building-type/total-area/num-floors/height leaves 'Confirm & Analyze' DISABLED (gate is form.floorAreas.every(a=>!a)). Total Floor Area is never distributed into the per-floor inputs and there is no visible message explaining why the button is disabled, so the user is stuck with a greyed button. Suggested fix: derive per-floor areas from totalArea/numberOfFloors (or accept totalArea alone) and render a validation hint.", "selector": "[data-testid=\"confirm-analyze-submit\"]", "priority": "HIGH"},
+      {"component": "manual/page.tsx", "issue": "Duplicate data-testid 'input-project-name' appears twice on the page (strict-mode locator hazard for future tests).", "selector": "[data-testid=\"input-project-name\"]", "priority": "LOW"},
+      {"component": "results/page.tsx", "issue": "Report title is hard-coded 'Mixed-Occupancy Building' even in SINGLE-occupancy mode (still open from iteration_2).", "selector": "h1", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/results - Suggested Positions side table", "issues": ["The side table is clipped mid-row at its bottom edge ('IS 2190:2024' row cut in half) with no visible scrollbar affordance - add max-height with overflow-y:auto plus a fade/scroll hint."]},
+      {"screen": "/results - plan-viewer", "issues": ["Fit-to-block now correctly fills the viewport with pan clamped (verified: scaled image 908x642 vs viewer 735x520), no dead space. No new issues."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3_regression.py",
+    "/app/backend/tests/test_real_plans.py",
+    "/app/test_reports/pytest/iteration3.xml",
+    "/app/test_reports/pytest/real_plans.xml"
+  ],
+  "action_items": [
+    "Enable /confirm submit from Total Floor Area alone (auto-split into per-floor areas) and show a validation message while the button is disabled; per-floor inputs now expose data-testid confirm-floor-area-{i} (added by QA).",
+    "Optional: clamp _block_bbox_around to a minimum span so non-floor blocks never emit a zero-width bbox (synthetic 'Area Statement').",
+    "Optional: improve anchor-region growth for almakka 'Ground Floor Plan' blocks (currently hasGeometry=false; only 'Floor Plan' is usable).",
+    "Optional UI: clarify block scale (1:100, floor page) vs planReference scale (1:200, title-block page) so the two numbers don't look contradictory.",
+    "De-duplicate data-testid 'input-project-name' on /manual; rename report title when occupancy mode is SINGLE."
+  ],
+  "critical_code_review_comments": [
+    "scale_detector._block_bbox_around: the >=20-segment guard plus degenerate fallback fixes the regression, but the no-trim path still returns the raw min/max with no minimum-span clamp - a single-column region yields a zero-area box.",
+    "routes/plan.py _choose_floor_page_by_text uses substring counts ('FLOOR PLAN' also matches inside 'GROUND FLOOR PLAN'), so scores double-count; it works today but is fragile - score distinct titles instead.",
+    "plan_reader/store.py is still an unbounded in-memory dict (full PDF bytes + rendered PNG per upload, no TTL/size cap) - memory grows per session.",
+    "confirm/page.tsx submit gate and handleSubmit duplicate the same validation logic; single-source it and surface the reason in the UI instead of only disabling the button."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3_regression.py (new)",
+    "/app/backend/tests/test_real_plans.py (2 stale assertions updated: digigov block scaleNote now accepts 1:100 for the newly-chosen floor page; almakka accepts 'unresolved' calibrationSource which is the intended fix for column-label dims)",
+    "/app/frontend/src/app/confirm/page.tsx (added data-testid confirm-floor-area-{i} to the per-floor area inputs - test-enablement only, no logic change)"
+  ],
+  "success_rate": {"backend": "100% (12/12 iteration-3 cases, 19/19 test_real_plans; 1 pre-existing analyze-manual failure in backend_test.py excluded per instructions)", "frontend": "90% (fit-to-block, viewer controls, placement UI, manual no-regression all pass; /confirm needs per-floor areas filled so the exact requested 4-field flow does not submit)"},
+  "seed_data_creation": "No DB writes. Used /app/backend/tests/_synthetic_plan.pdf and the real PDFs in /app/backend/tests/samples/. In-memory analyses only (TEST_Synth A4, TEST_Digigov, TEST_Manual A4).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "None required (no auth); /app/memory/test_credentials.md confirms.",
+  "context_for_next_testing_agent": "Run: cd /app/backend && /root/.venv/bin/python -m pytest tests/test_iteration3_regression.py tests/test_real_plans.py -p no:randomly -q (~75s; digigov/hotel extraction is 11-25s and is expected). The HIGH bbox regression from iteration_2 is FIXED and verified. Known-open: /confirm submit needs at least one per-floor area (>0) - use data-testid confirm-floor-area-0/1; almakka ground-floor blocks hasGeometry=false; synthetic 'Area Statement' zero-width bbox; /api/analyze-manual 400 (pre-existing, unused). /api/reports/compliance.pdf requires the body wrapped as {\"payload\": <analyze-mixed response>}.",
+  "rca_of_the_issue": "The iteration-2 regression was caused by percentile-trimming segment midpoints unconditionally in _block_bbox_around. The fix now (a) computes the full endpoint bbox as the baseline, (b) applies the 8th-92nd percentile trim only when len(region_lines) >= 20, and (c) falls back to the full bbox when the trimmed box is <20px in either axis. Verified: synthetic fixture geometryAvailable=true with a 340x255 ground-floor bbox and placement available, while digigov keeps a tight block (17% of the sheet) - so the fix restores sparse-geometry plans without loosening dense CAD sheets. Remaining /confirm blocker is a validation/UX gap (submit gated on floorAreas), not a backend defect."
+}

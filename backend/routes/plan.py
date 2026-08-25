@@ -49,15 +49,27 @@ async def plan_status():
     }
 
 
-def _choose_floor_page(pages: list) -> int:
-    """Prefer a page that contains a floor-plan block with real geometry."""
+def _choose_floor_page_by_text(pages: list) -> int:
+    """Pick the floor-plan page from TEXT only (fast — no geometry needed).
+
+    Scores each page by how many strong floor-plan titles it contains and
+    picks the best; 'KEY PLAN' alone does not qualify a page.
+    """
+    strong = ["GROUND FLOOR PLAN", "TYPICAL FLOOR PLAN", "FIRST FLOOR PLAN",
+              "SECOND FLOOR PLAN", "BASEMENT PLAN", "TERRACE PLAN", "FLOOR PLAN"]
+    best_idx, best_score = None, 0
     for p in pages:
-        blocks = find_blocks(p)
-        if any(b.is_floor_plan and b.has_geometry for b in blocks):
+        up = p.text.upper()
+        score = sum(up.count(k) for k in strong)
+        if score > best_score:
+            best_score, best_idx = score, p.index
+    if best_idx is not None:
+        return best_idx
+    # fallback: any page mentioning a floor, else page 0
+    for p in pages:
+        if "FLOOR" in p.text.upper() and "KEY PLAN" not in p.text.upper():
             return p.index
-    # else the page with the most vector lines
-    best = max(pages, key=lambda p: len(p.lines)) if pages else None
-    return best.index if best else 0
+    return pages[0].index if pages else 0
 
 
 @router.post("/api/plan/extract")
@@ -84,10 +96,12 @@ async def plan_extract(file: UploadFile = File(...)):
                 "aiOcr": "enabled" if cfg["ai_ocr_active"] else "disabled",
             })
 
-        # ── read all pages ──
-        pages = [doc.read_page(i) for i in range(doc.page_count)]
+        # ── read all pages (TEXT ONLY — fast; geometry/tables deferred) ──
+        pages = [doc.read_page(i, with_geometry=False, with_tables=False)
+                 for i in range(doc.page_count)]
         full_text = "\n".join(p.text for p in pages)
-        all_tables = [t for p in pages for t in p.tables]
+        all_tables: list = []  # find_tables() is too slow on dense CAD sheets;
+        # the text layer + regex parser covers Table Types 1/2/3.
 
         # ── scanned fallback (optional AI OCR) ──
         extraction_path = "vector_text"
@@ -102,7 +116,7 @@ async def plan_extract(file: UploadFile = File(...)):
                     full_text = full_text + "\n" + ocr_text
                     extraction_path = "scanned_ocr"
 
-        # ── table detection (Type 1 / 2 / 3) ──
+        # ── table detection (Type 1 / 2 / 3) from the text layer ──
         type1 = table_parser.parse_type1_fsi(full_text, all_tables)
         type2 = table_parser.parse_type2_occupancy(full_text, all_tables)
         type3 = table_parser.parse_type3_metadata(full_text, all_tables)
@@ -110,20 +124,23 @@ async def plan_extract(file: UploadFile = File(...)):
         # ── map to form fields ──
         mapping = field_mapper.build_mapping(full_text, type1, type2)
 
-        # ── per-block scale on the chosen floor page ──
-        floor_idx = _choose_floor_page(pages)
-        floor_page = pages[floor_idx]
+        # ── per-block scale on the chosen floor page (geometry pass here only) ──
+        floor_idx = _choose_floor_page_by_text(pages)
+        floor_page = doc.read_page(floor_idx, with_geometry=True, with_tables=False)
         blocks = find_blocks(floor_page)
         geometry_available = any(b.is_floor_plan and b.has_geometry for b in blocks)
 
         img = doc.render_png(floor_idx, zoom=cfg["render_zoom"])
         original_format = doc.original_format
+        converted_from = doc.converted_from
 
         plan_id = store.put({
             "bytes": content,
             "filename": file.filename or "plan",
             "floor_page_index": floor_idx,
             "zoom": cfg["render_zoom"],
+            "blocks": [b.to_dict() for b in blocks],
+            "image": img,
         })
 
         blocks_out = [{
@@ -141,6 +158,7 @@ async def plan_extract(file: UploadFile = File(...)):
             "planId": plan_id,
             "fileName": file.filename,
             "originalFormat": original_format,
+            "convertedFrom": converted_from,
             "pageCount": len(pages),
             "extractionPath": extraction_path,
             "tablesFound": {"type1": bool(type1), "type2": bool(type2), "type3": bool(type3)},
@@ -194,14 +212,19 @@ async def plan_placement(body: PlacementRequest):
                 "quantities": quantities,
             })
 
-        doc = PlanDocument(entry["bytes"], entry["filename"])
-        if doc.error or doc.doc is None:
-            return JSONResponse({"available": False, "reason": doc.error or "Could not re-open plan.", "quantities": quantities})
-
-        floor_idx = entry["floor_page_index"]
+        # Reuse the blocks + rendered image computed during extraction — no
+        # need to re-open the PDF or re-run the slow geometry pass.
+        from plan_reader.scale_detector import Block
         zoom = entry["zoom"]
-        page = doc.read_page(floor_idx)
-        blocks = find_blocks(page)
+        img = entry.get("image")
+        blocks = [Block.from_dict(d) for d in (entry.get("blocks") or [])]
+
+        if not blocks or img is None:
+            return JSONResponse({
+                "available": False,
+                "reason": "No cached plan geometry is available for placement. Please re-upload the plan.",
+                "quantities": quantities,
+            })
 
         block = None
         if body.blockId:
@@ -209,17 +232,15 @@ async def plan_placement(body: PlacementRequest):
         if block is None:
             block = next((b for b in blocks if b.is_floor_plan and b.has_geometry), None)
         if block is None:
-            block = next((b for b in blocks if b.is_floor_plan), None) or (blocks[0] if blocks else None)
+            block = next((b for b in blocks if b.is_floor_plan), None) or blocks[0]
 
         if block is None or not block.has_geometry:
-            doc.close()
             return JSONResponse({
                 "available": False,
                 "reason": "No floor-plan block with usable vector line geometry was found — placement needs real wall geometry. Equipment quantities are still available below.",
                 "quantities": quantities,
             })
 
-        img = doc.render_png(floor_idx, zoom=zoom)
         riser_px = None
         if body.riser and "x" in body.riser and "y" in body.riser:
             riser_px = (float(body.riser["x"]), float(body.riser["y"]))
@@ -234,7 +255,6 @@ async def plan_placement(body: PlacementRequest):
         result["pageImage"] = img
         result["blocks"] = [{"id": b.id, "title": b.title, "isFloorPlan": b.is_floor_plan,
                              "hasGeometry": b.has_geometry} for b in blocks]
-        doc.close()
         return JSONResponse(result)
 
     except Exception as exc:
