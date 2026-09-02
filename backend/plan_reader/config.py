@@ -23,8 +23,17 @@ def _as_bool(v: str | None) -> bool:
 
 
 def get_plan_config() -> dict:
-    key = os.environ.get("EMERGENT_LLM_KEY") or os.environ.get("PLAN_AI_OCR_KEY")
-    enable_ai = _as_bool(os.environ.get("PLAN_ENABLE_AI_OCR"))
+    key = (
+        os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("EMERGENT_LLM_KEY")
+        or os.environ.get("PLAN_AI_OCR_KEY")
+    )
+    enable_env = os.environ.get("PLAN_ENABLE_AI_OCR")
+    if enable_env is not None:
+        enable_ai = _as_bool(enable_env)
+    else:
+        enable_ai = bool(key)
+
     return {
         "ai_ocr_requested": enable_ai,
         "ai_ocr_key_present": bool(key),

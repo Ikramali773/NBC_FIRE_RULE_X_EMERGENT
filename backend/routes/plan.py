@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, UploadFile, File
@@ -27,7 +28,7 @@ from plan_reader import field_mapper
 from plan_reader.scale_detector import find_blocks
 from plan_reader.placement import compute_placement
 from plan_reader.equipment_estimator import estimate_quantities
-from plan_reader.ocr import ocr_page_png
+from plan_reader.ocr import ocr_page_png, ocr_and_extract_plan, synthesize_multipage_plan
 from plan_reader import store
 
 router = APIRouter()
@@ -103,26 +104,40 @@ async def plan_extract(file: UploadFile = File(...)):
         all_tables: list = []  # find_tables() is too slow on dense CAD sheets;
         # the text layer + regex parser covers Table Types 1/2/3.
 
-        # ── scanned fallback (optional AI OCR) ──
+        # ── scanned / multi-page fallback (optional AI OCR) ──
         extraction_path = "vector_text"
         scanned_pages = [p for p in pages if p.is_scanned]
-        if len(full_text.strip()) < 60 and scanned_pages:
+        ai_extracted_data = None
+        if len(full_text.strip()) < 60 and not cfg["ai_ocr_active"]:
             extraction_path = "scanned_no_ocr"
-            if cfg["ai_ocr_active"]:
-                # OCR the first scanned page image
-                img = doc.render_png(scanned_pages[0].index, zoom=cfg["render_zoom"])
-                ocr_text = await ocr_page_png(img["base64"])
-                if ocr_text:
-                    full_text = full_text + "\n" + ocr_text
-                    extraction_path = "scanned_ocr"
+        elif (len(full_text.strip()) < 60 or len(pages) > 1 or scanned_pages) and cfg["ai_ocr_active"]:
+            pages_to_ocr = pages[:10]  # Process all drawing sheets up to 10
+
+            async def _proc_page(sp):
+                img = doc.render_png(sp.index, zoom=cfg["render_zoom"])
+                return await ocr_and_extract_plan(img["base64"])
+
+            page_results = await asyncio.gather(*[_proc_page(sp) for sp in pages_to_ocr], return_exceptions=True)
+            valid_results = [r for r in page_results if isinstance(r, dict)]
+            if valid_results:
+                ai_extracted_data = synthesize_multipage_plan(valid_results)
+                full_text = full_text + "\n" + ai_extracted_data.get("ocr_text", "")
+                extraction_path = "scanned_ocr"
 
         # ── table detection (Type 1 / 2 / 3) from the text layer ──
         type1 = table_parser.parse_type1_fsi(full_text, all_tables)
         type2 = table_parser.parse_type2_occupancy(full_text, all_tables)
         type3 = table_parser.parse_type3_metadata(full_text, all_tables)
 
+        if ai_extracted_data and ai_extracted_data.get("tablesFound"):
+            tf = ai_extracted_data["tablesFound"]
+            if tf.get("type1") and not type1:
+                type1 = {"values": {"total_built_up_area": ai_extracted_data.get("prefill", {}).get("totalBuiltUpArea"), "plot_area": ai_extracted_data.get("prefill", {}).get("plotArea")}, "confidence": "high", "raw_signals": ["AI OCR Table Type 1"]}
+            if tf.get("type2") and not type2:
+                type2 = {"values": {"inferred_occupancy_group": (ai_extracted_data.get("prefill", {}).get("primaryOccupancy") or "F")[:1]}, "confidence": "high"}
+
         # ── map to form fields ──
-        mapping = field_mapper.build_mapping(full_text, type1, type2)
+        mapping = field_mapper.build_mapping(full_text, type1, type2, ai_data=ai_extracted_data)
 
         # ── per-block scale on the chosen floor page (geometry pass here only) ──
         floor_idx = _choose_floor_page_by_text(pages)

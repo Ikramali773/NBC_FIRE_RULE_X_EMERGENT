@@ -120,7 +120,7 @@ Return a JSON object with these exact fields:
 
 
 class GeminiProvider:
-    name = "gemini-2.5-flash"
+    name = "gemini-3.6-flash"
 
     def __init__(self) -> None:
         api_key = os.environ.get("GEMINI_API_KEY")
@@ -143,7 +143,7 @@ class GeminiProvider:
         for attempt in range(MAX_RETRIES + 1):
             try:
                 model = genai.GenerativeModel(
-                    model_name="gemini-2.5-flash",
+                    model_name="gemini-3.6-flash",
                     system_instruction=SYSTEM_INSTRUCTION,
                     generation_config=genai.GenerationConfig(
                         response_mime_type="application/json",

@@ -43,7 +43,11 @@ def _flatten_tables(tables: list[list[list[str]]]) -> str:
 def parse_type1_fsi(text: str, tables: list[list[list[str]]]) -> dict | None:
     hay = (text + "\n" + _flatten_tables(tables))
     up = hay.upper()
-    signals = ["F.S.I", "FSI", "PLOT AREA", "BUILT UP AREA", "BUILT-UP AREA", "BALANCE FSI", "PROPOSED B.U.A"]
+    signals = [
+        "F.S.I", "FSI", "PLOT AREA", "BUILT UP AREA", "BUILT-UP AREA", "BUILTUP AREA",
+        "BALANCE FSI", "PROPOSED B.U.A", "AREA TABLE", "TOTAL AREA", "PROPOSED BUILTUP",
+        "PERMI. BUILTUP", "PROPOSED F.S.I", "TOTAL BUILTUP"
+    ]
     if not any(s in up for s in signals):
         return None
 
@@ -56,10 +60,18 @@ def parse_type1_fsi(text: str, tables: list[list[list[str]]]) -> dict | None:
                     return v
         return None
 
-    plot_area = grab([r"PLOT\s*AREA[^0-9]{0,20}" + _NUM, r"AREA\s*OF\s*PLOT[^0-9]{0,20}" + _NUM])
+    plot_area = grab([
+        r"PLOT\s*AREA[^0-9]{0,20}" + _NUM,
+        r"AREA\s*OF\s*PLOT[^0-9]{0,20}" + _NUM,
+        r"TOTAL\s*AREA\s*(?:OF\s*[^=\n]+)?\s*=\s*" + _NUM,
+        r"AREA\s*OF\s*PART\s*[\-A-Z\s\(\)]*=\s*" + _NUM,
+    ])
     built_up = grab([
         r"TOTAL\s*BUILT[\s\-]*UP\s*AREA[^0-9]{0,20}" + _NUM,
+        r"PROPOSED\s*BUILT[\s\-]*UP\s*AREA[^\n=]*=\s*" + _NUM,
         r"PROPOSED\s*B\.?U\.?A[^0-9]{0,20}" + _NUM,
+        r"PROPOSED\s*F\.?S\.?I\.?\s*(?:USED)?[^\n=]*=\s*" + _NUM,
+        r"PERMI\.?\s*BUILT[\s\-]*UP\s*AREA[^\n=]*=\s*" + _NUM,
         r"BUILT[\s\-]*UP\s*AREA[^0-9]{0,20}" + _NUM,
     ])
     fsi_ratio = grab([r"F\.?S\.?I\.?\s*(?:RATIO|CONSUMED|PROPOSED)?[^0-9]{0,12}([0-9]\.[0-9]+)"])
@@ -77,7 +89,7 @@ def parse_type1_fsi(text: str, tables: list[list[list[str]]]) -> dict | None:
     if not found:
         return None
     # confidence: high if from a real table, medium if from loose text
-    from_table = _flatten_tables(tables) and any(s in _flatten_tables(tables).upper() for s in signals)
+    from_table = (_flatten_tables(tables) and any(s in _flatten_tables(tables).upper() for s in signals)) or ("AREA TABLE" in up)
     return {"values": found, "confidence": "high" if from_table else "medium", "raw_signals": [s for s in signals if s in up]}
 
 
@@ -100,7 +112,7 @@ def parse_type2_occupancy(text: str, tables: list[list[list[str]]]) -> dict | No
     hay = (text + "\n" + _flatten_tables(tables))
     up = hay.upper()
     structured = "AREA STATEMENT" in up or ("PLOT USE" in up and "BUILDING USE" in up)
-    signals = ["AREA STATEMENT", "PLOT USE", "PLOT SUBUSE", "BUILDING USE", "BUILDING SUBUSE", "OCCUPANCY", "USE OF BUILDING"]
+    signals = ["AREA STATEMENT", "PLOT USE", "PLOT SUBUSE", "BUILDING USE", "BUILDING SUBUSE", "OCCUPANCY", "USE OF BUILDING", "COMMERCIAL PURPOSE", "FOR COMMERCIAL", "RESIDENTIAL PURPOSE"]
     if not any(s in up for s in signals) and not structured:
         # fall back to keyword scan
         pass
@@ -114,6 +126,10 @@ def parse_type2_occupancy(text: str, tables: list[list[list[str]]]) -> dict | No
     building_use = grab(r"BUILDING\s*USE")
     building_subuse = grab(r"BUILDING\s*SUB\s*USE")
     declared_use = grab(r"USE\s*OF\s*BUILDING") or grab(r"OCCUPANCY")
+    if not declared_use and "FOR COMMERCIAL" in up:
+        declared_use = "Commercial"
+    elif not declared_use and "FOR RESIDENTIAL" in up:
+        declared_use = "Residential"
 
     # infer NBC group from any use string
     inferred_group = None
